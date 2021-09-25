@@ -6,9 +6,12 @@ import java.util.concurrent.TimeoutException;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.ForbiddenException;
 import javax.ws.rs.GET;
+import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -43,7 +46,7 @@ public class Thermostats {
 
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
-	public Response createThermostat(@Context UriInfo uriInfo, CreateThermostatRequest request) throws IOException {
+	public Response createThermostat(@Context UriInfo uriInfo, CreateThermostatRequest request) {
 		try {
 			var thermostat = manager.connectThermostat(request.getLabel(), request.getPort());
 			var location = uriInfo.getAbsolutePathBuilder()
@@ -54,6 +57,8 @@ public class Thermostats {
 			return Response.status(Status.CONFLICT).entity(e.getError().getMessage()).build();
 		} catch (IllegalArgumentException | SerialPortInvalidPortException e) {
 			return Response.status(Status.BAD_REQUEST).entity(e.getMessage()).build();
+		} catch (IOException e) {
+			return Response.serverError().entity(e.getMessage()).build();
 		}
 	}
 
@@ -68,11 +73,18 @@ public class Thermostats {
 	@Path("/{id}")
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.APPLICATION_JSON)
-	public Thermostat updateThermostat(@PathParam("id") ObjectId id, UpdateThermostatRequest request)
-			throws NotFoundException, IOException, TimeoutException, InterruptedException {
+	public Thermostat updateThermostat(@PathParam("id") ObjectId id, UpdateThermostatRequest request) {
 		if (request.getDesiredTemperature() != null) {
-			return manager.setThermostatDesiredTemperature(id, request.getDesiredTemperature())
-					.orElseThrow(NotFoundException::new);
+			try {
+				return manager.setThermostatDesiredTemperature(id, request.getDesiredTemperature())
+						.orElseThrow(NotFoundException::new);
+			} catch (IllegalStateException e) {
+				throw new ForbiddenException(e);
+			} catch (TimeoutException e) {
+				throw new ClientErrorException(Status.GATEWAY_TIMEOUT, e);
+			} catch (IOException | InterruptedException e) {
+				throw new InternalServerErrorException(e);
+			}
 		}
 		return getThermostat(id);
 	}

@@ -110,6 +110,9 @@ public class ThermostatClient {
 
 	public Thermostat setDesiredTemperature(float desiredTemperature)
 			throws IOException, TimeoutException, InterruptedException {
+		if (thermostat.remoteUpdateDisabled != null && thermostat.remoteUpdateDisabled.booleanValue()) {
+			throw new IllegalStateException("remote updates are currently disabled by the thermostat");
+		}
 		writeMessage(String.format("D:%f", desiredTemperature));
 		for (int i = 0; i < 10; ++i) {
 			Thread.sleep(500);
