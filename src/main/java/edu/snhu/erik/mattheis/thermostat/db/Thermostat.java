@@ -5,6 +5,8 @@ import java.util.List;
 
 import org.bson.types.ObjectId;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.mongodb.BasicDBObject;
 import com.mongodb.client.model.IndexModel;
 import com.mongodb.client.model.IndexOptions;
@@ -12,6 +14,7 @@ import com.mongodb.client.model.IndexOptions;
 import io.quarkus.mongodb.panache.common.MongoEntity;
 
 @MongoEntity(collection = Thermostat.COLLECTION)
+@JsonInclude(Include.NON_NULL)
 public class Thermostat {
 
 	public static final String COLLECTION = "thermostat";
@@ -28,6 +31,9 @@ public class Thermostat {
 	public Boolean heaterOn;
 	public Boolean remoteUpdateDisabled;
 
+	public Thermostat() {
+	}
+	
 	public Thermostat(String label, String port) {
 		this.label = label;
 		this.port = port;
