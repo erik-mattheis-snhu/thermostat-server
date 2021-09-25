@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
@@ -113,15 +114,16 @@ public class ThermostatClient {
 		if (thermostat.remoteUpdateDisabled != null && thermostat.remoteUpdateDisabled.booleanValue()) {
 			throw new IllegalStateException("remote updates are currently disabled by the thermostat");
 		}
+		var before = thermostat.lastUpdate;
 		writeMessage(String.format("D:%f", desiredTemperature));
 		for (int i = 0; i < 10; ++i) {
 			Thread.sleep(500);
-			if (thermostat.desiredTemperature != null
-					&& Math.abs(thermostat.desiredTemperature - desiredTemperature) < 0.0001) {
+			if (!Objects.equals(before, thermostat.lastUpdate)) {
 				return thermostat;
 			}
+			requestUpdate();
 		}
-		throw new TimeoutException("desired temperature was not updated within 5 seconds");
+		throw new TimeoutException("no update from thermostat within 5 seconds");
 	}
 
 	private synchronized void writeMessage(String message) throws IOException {
