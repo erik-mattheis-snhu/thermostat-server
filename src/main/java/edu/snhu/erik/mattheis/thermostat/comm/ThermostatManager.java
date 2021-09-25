@@ -55,19 +55,19 @@ public class ThermostatManager {
 								client = new ThermostatClient(serialPort, thermostat, repository);
 								thermostatClients.put(thermostat.id, client);
 								client.connect();
-							} catch (SerialPortInvalidPortException | IOException e) {
+							} catch (Exception e) {
 								log.error("problem connecting to thermostat '{}'", thermostat.label, e);
 							}
 						} else if (!client.isConnected()) {
 							try {
 								client.connect();
-							} catch (IOException e) {
+							} catch (Exception e) {
 								log.error("problem reconnecting thermostat '{}'", thermostat.label, e);
 							}
 						} else if (client.getThermostat().lastUpdate.plus(1, MINUTES).isAfter(now())) {
 							try {
 								client.requestUpdate();
-							} catch (IOException e) {
+							} catch (Exception e) {
 								log.error("problem updating thermostat '{}'", thermostat.label, e);
 							}
 						}
