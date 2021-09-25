@@ -11,6 +11,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jSerialComm.version>2.7.0</jSerialComm.version>
         <quarkus.version>2.2.3.Final</quarkus.version>
+        <quarkus.package.type>uber-jar</quarkus.package.type>
+        <quarkus.package.runner-suffix>-${project.version}</quarkus.package.runner-suffix>
     </properties>
 
     <dependencyManagement>
@@ -46,6 +48,7 @@
     </dependencies>
 
     <build>
+        <finalName>${project.artifactId}</finalName>
         <plugins>
             <plugin>
                 <groupId>io.quarkus.platform</groupId>
