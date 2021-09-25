@@ -86,7 +86,9 @@ public class ThermostatClient {
 		serialPort.setNumDataBits(8);
 		serialPort.setParity(SerialPort.NO_PARITY);
 		serialPort.setNumStopBits(1);
-		serialPort.openPort();
+		if (!serialPort.openPort()) {
+			throw new IOException("failed to open serial port " + serialPort.getSystemPortName());
+		}
 		serialPort.addDataListener(listener);
 		writer = new OutputStreamWriter(serialPort.getOutputStream(), US_ASCII);
 		requestUpdate();
