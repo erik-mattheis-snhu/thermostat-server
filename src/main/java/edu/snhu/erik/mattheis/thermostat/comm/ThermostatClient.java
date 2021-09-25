@@ -89,8 +89,8 @@ public class ThermostatClient {
 		serialPort.openPort();
 		serialPort.addDataListener(listener);
 		writer = new OutputStreamWriter(serialPort.getOutputStream(), US_ASCII);
-		log.info("connected to thermostat '{}'", thermostat.label);
 		requestUpdate();
+		log.info("connected to thermostat '{}'", thermostat.label);
 	}
 
 	public void disconnect() {
