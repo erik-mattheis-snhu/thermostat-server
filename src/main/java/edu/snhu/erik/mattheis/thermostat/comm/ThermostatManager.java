@@ -25,10 +25,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fazecast.jSerialComm.SerialPort;
-import com.fazecast.jSerialComm.SerialPortInvalidPortException;
 
 import edu.snhu.erik.mattheis.thermostat.db.Thermostat;
 import edu.snhu.erik.mattheis.thermostat.db.ThermostatRepository;
+import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 
 @ApplicationScoped
@@ -38,11 +38,14 @@ public class ThermostatManager {
 	private final Map<ObjectId, ThermostatClient> thermostatClients = new HashMap<>();
 	private final Lock clientLock = new ReentrantLock();
 	private final Timer timer = new Timer();
+	
+	private volatile TimerTask poller;
 
 	@Inject
 	ThermostatRepository repository;
+	
 	void onStartup(@Observes StartupEvent startup) {
-		timer.scheduleAtFixedRate(new TimerTask() {
+		poller = new TimerTask() {
 			@Override
 			public void run() {
 				clientLock.lock();
@@ -76,7 +79,19 @@ public class ThermostatManager {
 					clientLock.unlock();
 				}
 			}
-		}, 0, 60000);
+		};
+		timer.scheduleAtFixedRate(poller, 0, 60000);
+	}
+	
+	void onShutdown(@Observes ShutdownEvent shutdown) {
+		poller.cancel();
+		clientLock.lock();
+		try {
+			thermostatClients.values().forEach(ThermostatClient::disconnect);
+			thermostatClients.clear();
+		} finally {
+			clientLock.unlock();
+		}
 	}
 	
 	public List<AvailablePort> getAvailablePorts() {
@@ -98,7 +113,7 @@ public class ThermostatManager {
 				throw new IllegalArgumentException("port unavailable");
 			}
 			var serialPort = SerialPort.getCommPort(port);
-			var thermostat = repository.create(label, port);
+			var thermostat = createThermostat(label, port);
 			var thermostatClient = new ThermostatClient(serialPort, thermostat, repository);
 			thermostatClients.put(thermostat.id, thermostatClient);
 			thermostatClient.connect();
@@ -153,6 +168,12 @@ public class ThermostatManager {
 		}
 	}
 
+	private Thermostat createThermostat(String label, String port) {
+		var thermostat = Thermostat.create(label, port);
+		repository.persist(thermostat);
+		return thermostat;
+	}
+	
 	private boolean portHasClient(String port) {
 		return thermostatClients.values().stream().filter(client -> port.equals(client.getThermostat().port)).findAny()
 				.isPresent();

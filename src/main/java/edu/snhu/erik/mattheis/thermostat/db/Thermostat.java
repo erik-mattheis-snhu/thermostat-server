@@ -31,11 +31,12 @@ public class Thermostat {
 	public Boolean heaterOn;
 	public Boolean remoteUpdateDisabled;
 
-	public Thermostat() {
-	}
-	
-	public Thermostat(String label, String port) {
-		this.label = label;
-		this.port = port;
+	public static Thermostat create(String label, String port) {
+		Thermostat thermostat = new Thermostat();
+		
+		thermostat.label = label;
+		thermostat.port = port;
+		
+		return thermostat;
 	}
 }

@@ -30,29 +30,33 @@ public class ThermostatClient {
 	private final SerialPort serialPort;
 	private final SerialPortMessageListener listener = new SerialPortMessageListener() {
 		public void serialEvent(SerialPortEvent event) {
-			var data = event.getReceivedData();
-			var message = new String(data, 0, data.length - 1, US_ASCII)	;
-			log.info("received message from thermostat '{}': {}", thermostat.label, message);
-			Stream.of(message.split(","))
-					.map(part -> part.split(":"))
-					.forEach(keyValue -> {
-						switch (keyValue[0]) {
-						case "D":
-							thermostat.desiredTemperature = Float.valueOf(keyValue[1]);
-							break;
-						case "A":
-							thermostat.ambientTemperature = Float.valueOf(keyValue[1]);
-							break;
-						case "H":
-							thermostat.heaterOn = "1".equals(keyValue[1]);
-							break;
-						case "L":
-							thermostat.remoteUpdateDisabled = "1".equals(keyValue[1]);
-							break;
-						}
-					});
-			thermostat.lastUpdate = Instant.now();
-			repository.update(thermostat);
+			try {
+				var data = event.getReceivedData();
+				var message = new String(data, 0, data.length - 1, US_ASCII)	;
+				log.info("received message from thermostat '{}': {}", thermostat.label, message);
+				Stream.of(message.split(","))
+						.map(part -> part.split(":"))
+						.forEach(keyValue -> {
+							switch (keyValue[0]) {
+							case "D":
+								thermostat.desiredTemperature = Float.valueOf(keyValue[1]);
+								break;
+							case "A":
+								thermostat.ambientTemperature = Float.valueOf(keyValue[1]);
+								break;
+							case "H":
+								thermostat.heaterOn = "1".equals(keyValue[1]);
+								break;
+							case "L":
+								thermostat.remoteUpdateDisabled = "1".equals(keyValue[1]);
+								break;
+							}
+						});
+				thermostat.lastUpdate = Instant.now();
+				repository.update(thermostat);
+			} catch (Exception e) {
+				log.error("problem handling message from thermostat '{}'", thermostat.label, e);
+			}
 		}
 
 		@Override

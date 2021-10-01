@@ -1,6 +1,7 @@
 package edu.snhu.erik.mattheis.thermostat.rest;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
@@ -16,6 +17,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
@@ -29,6 +31,8 @@ import com.fazecast.jSerialComm.SerialPortInvalidPortException;
 import com.mongodb.MongoWriteException;
 
 import edu.snhu.erik.mattheis.thermostat.comm.ThermostatManager;
+import edu.snhu.erik.mattheis.thermostat.db.TemperatureHistory;
+import edu.snhu.erik.mattheis.thermostat.db.TemperatureRepository;
 import edu.snhu.erik.mattheis.thermostat.db.Thermostat;
 
 @Path("/thermostats")
@@ -37,6 +41,9 @@ public class Thermostats {
 
 	@Inject
 	ThermostatManager manager;
+	
+	@Inject
+	TemperatureRepository temperatureRepository;
 
 	@GET
 	@Produces(MediaType.APPLICATION_JSON)
@@ -95,5 +102,12 @@ public class Thermostats {
 		if (!manager.disconnectThermostat(id)) {
 			throw new NotFoundException();
 		}
+	}
+	
+	@GET
+	@Path("/{id}/temperature/history")
+	@Produces(MediaType.APPLICATION_JSON)
+	public TemperatureHistory getThermostatTemperatureHistory(@PathParam("id") String id, @QueryParam("from") Instant from, @QueryParam("to") Instant to) {
+		return temperatureRepository.getTemperatureHistory(id, from, to);
 	}
 }
