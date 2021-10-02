@@ -22,14 +22,16 @@ function addThermostatCard(thermostat) {
   $('<div/>', { class: 'col' })
   .append($('<div/>', { id: 'thermostat_' + thermostat.id, class: 'card' })
           .append($('<h4/>', { class: 'card-header text-white bg-primary bg-gradient', text: thermostat.label })
-                  .append($('<span/>', { class: 'badge rounded-pill float-end fw-normal text-uppercase text-light bg-danger bg-gradient', text: 'heat' }).toggle(thermostat.heaterOn)))
+                  .append($('<span/>', { class: 'badge rounded-pill float-end fw-normal text-uppercase text-light bg-gradient bg-' + (thermostat.heaterOn ? 'danger' : 'secondary'), text: (thermostat.heaterOn ? 'heat' : 'off') })))
           .append($('<div/>', { class: 'card-body' })
                     .append($('<h1/>', { class: 'card-title display-1', text: formatTemperature(thermostat.ambientTemperature) }))
                     .append($('<div/>', { class: 'input-group w-50' })
                             .append($('<label/>', { class: 'input-group-text', for: 'desired_temp_' + thermostat.id, text: 'Set:' }))
                             .append($('<select/>', { class: 'form-select', id: 'desired_temp_' + thermostat.id, disabled: thermostat.remoteUpdateDisabled })
                                     .change(function(event) { changeDesiredTemperature(thermostat.id, $(event.target).val()); })
-                                    .append(generateTemperatureOptions(thermostat.desiredTemperature))))
+                                    .append(generateTemperatureOptions(thermostat.desiredTemperature)))
+                            .append($('<span/>', { class: 'input-group-text' })
+                                    .append($('<i/>', { class: (thermostat.remoteUpdateDisabled ? 'bi-lock' : 'bi-unlock') }))))
                     .append($('<div/>', { class: 'card mt-3' })
                             .append($('<div/>', { class: 'card-body' })
                                     .append($('<div/>', { id: 'temperature_history_' + thermostat.id }))))))
@@ -79,9 +81,10 @@ function subscribeToUpdates(id) {
   var socket = new WebSocket('ws://' + window.location.host + '/api/thermostats/' + id + '/updates');
   socket.onmessage = function(event) {
 	var thermostat = JSON.parse(event.data);
-    $('#thermostat_' + thermostat.id + ' .card-header .badge').toggle(thermostat.heaterOn);
+    $('#thermostat_' + thermostat.id + ' .card-header .badge').removeClass(thermostat.heaterOn ? 'bg-secondary' : 'bg-danger').addClass(thermostat.heaterOn ? 'bg-danger' : 'bg-secondary').text(thermostat.heaterOn ? 'heat' : 'off');
     $('#thermostat_' + thermostat.id + ' .card-title').text(formatTemperature(thermostat.ambientTemperature));
     $('#desired_temp_' + thermostat.id).val(thermostat.desiredTemperature).prop('disabled', thermostat.remoteUpdateDisabled);
+    $('#thermostat_' + thermostat.id + ' .input-group i').prop('class', thermostat.remoteUpdateDisabled ? 'bi-lock' : 'bi-unlock');
   }
   socket.onclose = socket.onerror = function() {
     subscribeToUpdates(id);
