@@ -31,6 +31,11 @@ import edu.snhu.erik.mattheis.thermostat.db.ThermostatRepository;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
 
+/**
+ * manages configuration of and connections to thermostats
+ * 
+ * @author <a href="mailto:erik.mattheis@snhu.edu">Erik Mattheis</a>
+ */
 @ApplicationScoped
 public class ThermostatManager {
 
@@ -44,16 +49,22 @@ public class ThermostatManager {
 	@Inject
 	ThermostatRepository repository;
 	
+	/**
+	 * starts a polling task to maintain connections to configured thermostats
+	 * running immediately and every minute thereafter
+	 *  
+	 * @param startup the Quarkus startup event
+	 */
 	void onStartup(@Observes StartupEvent startup) {
 		poller = new TimerTask() {
 			@Override
 			public void run() {
 				clientLock.lock();
 				try {
-					repository.listAll().forEach(thermostat -> {
-						var client = thermostatClients.get(thermostat.id);
-						if (client == null) {
-							try {
+					repository.listAll().forEach(thermostat -> {           // for all thermostats in the database...
+						var client = thermostatClients.get(thermostat.id); // get the associated client
+						if (client == null) {                              // if no client exists...
+							try {                                          //     create a new one and connect to the thermostat
 								var serialPort = SerialPort.getCommPort(thermostat.port);
 								client = new ThermostatClient(serialPort, thermostat, repository);
 								thermostatClients.put(thermostat.id, client);
@@ -61,14 +72,14 @@ public class ThermostatManager {
 							} catch (Exception e) {
 								log.error("problem connecting to thermostat '{}'", thermostat.label, e);
 							}
-						} else if (!client.isConnected()) {
-							try {
+						} else if (!client.isConnected()) {                 // else if the client is disconnected... 
+							try {                                           //     try to reconnect to the thermostat
 								client.connect();
 							} catch (Exception e) {
 								log.error("problem reconnecting thermostat '{}'", thermostat.label, e);
 							}
-						} else if (client.getThermostat().lastUpdate.plus(1, MINUTES).isAfter(now())) {
-							try {
+						} else if (!upToDate(client.getThermostat())) {     // else if the thermostat is not up to date...
+							try {                                           //     request an immediate update
 								client.requestUpdate();
 							} catch (Exception e) {
 								log.error("problem updating thermostat '{}'", thermostat.label, e);
@@ -83,6 +94,11 @@ public class ThermostatManager {
 		timer.scheduleAtFixedRate(poller, 0, 60000);
 	}
 	
+	/**
+	 * cancels the polling task, then disconnects and discards all thermostat clients
+	 * 
+	 * @param shutdown the Quarkus shutdown event
+	 */
 	void onShutdown(@Observes ShutdownEvent shutdown) {
 		poller.cancel();
 		clientLock.lock();
@@ -94,12 +110,28 @@ public class ThermostatManager {
 		}
 	}
 	
+	/**
+	 * gets the list of available ports for connecting to a thermostat
+	 * 
+	 * @return the list of available ports
+	 */
 	public List<AvailablePort> getAvailablePorts() {
-		return Stream.of(SerialPort.getCommPorts()).filter(port -> !port.getSystemPortName().startsWith("tty."))
-				.filter(port -> !portHasClient(port.getSystemPortName())).map(AvailablePort::of)
-				.collect(Collectors.toUnmodifiableList());
+		return Stream.of(SerialPort.getCommPorts())                                // get all the serial ports
+		             .filter(port -> !port.getSystemPortName().startsWith("tty.")) // ignore the tty ports on Linux/MacOS
+		             .filter(port -> !portHasClient(port.getSystemPortName()))     // ignore ports with existing clients
+		             .map(AvailablePort::of)
+		             .collect(Collectors.toUnmodifiableList());
 	}
 
+	/**
+	 * connect to a new thermostat with the designated label and port
+	 * 
+	 * @param label a descriptive name for the thermostat
+	 * @param port  the system identifier for the port to connect to
+	 * @return the initial state of the newly connected thermostat
+	 * @throws IOException if a failure occurs communicating with the thermostat on the serial port
+	 * @throws IllegalArgumentException if label or port is null or blank, or the port is unavailable
+	 */
 	public Thermostat connectThermostat(String label, String port) throws IOException {
 		clientLock.lock();
 		try {
@@ -123,27 +155,56 @@ public class ThermostatManager {
 		}
 	}
 
+	/**
+	 * gets the state of all configured thermostats
+	 * 
+	 * @return the list of thermostat states 
+	 */
 	public List<Thermostat> listThermostats() {
 		return thermostatClients.values().stream()
 				.map(ThermostatClient::getThermostat)
 				.collect(Collectors.toUnmodifiableList());
 	}
 
+	/**
+	 * gets the state of a configured thermostat with the given id
+	 * 
+	 * @param id the id of the thermostat to get
+	 * @return the state of the matching thermostat or {@link Optional#empty()} if no thermostat matches the id
+	 */
 	public Optional<Thermostat> getThermostat(ObjectId id) {
 		return Optional.ofNullable(thermostatClients.get(id)).map(ThermostatClient::getThermostat);
 	}
 
-	public Optional<Thermostat> setThermostatLabel(ObjectId id, String label) throws IOException {
+	/**
+	 * sets the label of the thermostat with the given id
+	 * 
+	 * @param id the id of the thermostat to update
+	 * @param label a descriptive name for the thermostat
+	 * @return the updated state of the matching thermostat or {@link Optional#empty()} if no thermostat matches the id
+	 */
+	public Optional<Thermostat> setThermostatLabel(ObjectId id, String label) {
 		var client = thermostatClients.get(id);
 		if (client == null) {
 			return Optional.empty();
 		}
 		var thermostat = client.getThermostat();
 		thermostat.label = label;
-		client.requestUpdate();
+		repository.update(thermostat);
 		return Optional.of(thermostat);
 	}
 
+	/**
+	 * sets the desired temperature of the thermostat with the given id
+	 * 
+	 * @param id the id of the thermostat to update
+	 * @param desiredTemperature the desired temperature to set on the thermostat
+	 * @return the updated state of the matching thermostat or {@link Optional#empty()} if no thermostat matches the id
+	 * @throws IOException if a failure occurs communicating with the thermostat on the serial port
+	 * @throws IllegalStateException if the client is not connected or remote updates are disabled on the thermostat
+	 * @throws TimeoutException if an update is not received from the thermostat within 5 seconds
+	 * @throws InterruptedException if the thread is interrupted while waiting for an update
+	 */
 	public Optional<Thermostat> setThermostatDesiredTemperature(ObjectId id, float desiredTemperature)
 			throws IOException, TimeoutException, InterruptedException {
 		var client = thermostatClients.get(id);
@@ -153,6 +214,12 @@ public class ThermostatManager {
 		return Optional.of(client.setDesiredTemperature(desiredTemperature));
 	}
 
+	/**
+	 * disconnects from the thermostat with the given id and discards the configuration
+	 * 
+	 * @param id the id of the thermostat to disconnect from
+	 * @return {@code true} if the thermostat configuation was successfully discarded 
+	 */
 	public boolean disconnectThermostat(ObjectId id) {
 		clientLock.lock();
 		try {
@@ -177,5 +244,9 @@ public class ThermostatManager {
 	private boolean portHasClient(String port) {
 		return thermostatClients.values().stream().filter(client -> port.equals(client.getThermostat().port)).findAny()
 				.isPresent();
+	}
+
+	private static boolean upToDate(Thermostat thermostat) {
+		return thermostat.lastUpdate.plus(1, MINUTES).isAfter(now());
 	}
 }
