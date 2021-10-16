@@ -18,6 +18,11 @@ import org.slf4j.LoggerFactory;
 
 import edu.snhu.erik.mattheis.thermostat.db.Thermostat;
 
+/**
+ * a websocket server endpoint for providing thermostat updates
+ * 
+ * @author <a href="mailto:erik.mattheis@snhu.edu">Erik Mattheis</a>
+ */
 @ServerEndpoint(value = "/api/thermostats/{id}/updates", encoders = JsonEncoder.class)
 @ApplicationScoped
 public class ThermostatUpdateSocket {
@@ -25,24 +30,48 @@ public class ThermostatUpdateSocket {
 	private final Logger log = LoggerFactory.getLogger(getClass());
 	private final Map<String, Set<Session>> thermostatSessions = new ConcurrentHashMap<>();
 
+	/**
+	 * stores the session in a map by thermostat ID
+	 * 
+	 * @param session the opened websocket session
+	 * @param thermostatId the ID of the thermostat to provide updates for
+	 */
 	@OnOpen
 	public void onOpen(Session session, @PathParam("id") String thermostatId) {
 		thermostatSessions.computeIfAbsent(thermostatId, key -> ConcurrentHashMap.newKeySet()).add(session);
 		log.info("session {} for thermostat {} opened", session.getId(), thermostatId);
 	}
 
+	/**
+	 * removes the session from the map
+	 * 
+	 * @param session the closed session
+	 * @param thermostatId the ID of the thermostat the session was listening to
+	 */
 	@OnClose
 	public void onClose(Session session, @PathParam("id") String thermostatId) {
 		thermostatSessions.values().forEach(sessions -> sessions.remove(session));
 		log.info("session {} for thermostat {} closed", session.getId(), thermostatId);
 	}
 
+	/**
+	 * removes the session from the map
+	 * 
+	 * @param session the closed session
+	 * @param thermostatId the ID of the thermostat the session was listening to
+	 */
 	@OnError
 	public void onError(Session session, @PathParam("id") String thermostatId, Throwable throwable) {
 		thermostatSessions.values().forEach(sessions -> sessions.remove(session));
 		log.error("session {} for thermostat {} errored", session.getId(), thermostatId, throwable);
 	}
 
+	/**
+	 * sends the provided thermostat state as a JSON payload to all
+	 * sessions linked to the correspoinding ID
+	 * 
+	 * @param thermostat the thermostat state to send
+	 */
 	public void broadcast(Thermostat thermostat) {
 		var thermostatId = thermostat.id.toHexString();
 		Optional.ofNullable(thermostatSessions.get(thermostatId)).stream().flatMap(Set::stream)
